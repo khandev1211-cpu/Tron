@@ -1,0 +1,4 @@
+tronpy
+redis
+python-dotenv
+requests
