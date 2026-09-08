@@ -1,0 +1,6 @@
+Project Flow:
+
+First, the system scans the TRON blockchain and identifies TRC-20 USDT wallets holding 7,499+ USDT. It stores a partial address pattern (first 4 + last 5 characters) in Redis. Then it continuously monitors live USDT transfers and detects transactions in the 1–501 USDT range. When a matching transfer comes from a tracked wallet, it sends an alert to Telegram with the wallet and transaction details. From the Telegram “Vanity It!” button, a GPU-based engine is triggered to generate a new TRON address matching the tracked wallet’s 4+5 character pattern, and the generated address/private-key information is returned to the dashboard. The document does not specify the final business use of that newly generated address.
+
+
+
