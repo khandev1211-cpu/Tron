@@ -47,14 +47,14 @@ class HarvesterAgent(BaseAgent):
             return []
 
     def on_run(self):
-        self.log("Starting production harvest (Top 100 High-Value Wallets)...")
+        self.log("Starting production harvest (Top 50 High-Value Wallets)...")
 
         all_holders = []
-        # Fetching Top 100 holders (Professional standard for high-value targets)
+        # Fetching Top 50 holders as requested
         url = "https://apilist.tronscanapi.com/api/token_trc20/holders"
         params = {
             "contract_address": self.usdt_contract,
-            "start": 0, "limit": 100, "sort": "balance"
+            "start": 0, "limit": 50, "sort": "balance"
         }
         headers = {"User-Agent": "TronSentinel/1.0", "Origin": "https://api.trongrid.io/get"}
         api_key = self.tronscan_key if self.tronscan_key and "PASTE" not in self.tronscan_key else self.trongrid_key
