@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import time
 from decimal import Decimal
 from base_agent import BaseAgent
 
@@ -27,7 +28,7 @@ class HarvesterAgent(BaseAgent):
         url = "https://apilist.tronscanapi.com/api/token_trc20/holders"
         params = {
             "contract_address": self.usdt_contract,
-            "start": 0, "limit": 100, "sort": "balance"
+            "start": 0, "limit": 500, "sort": "balance"
         }
         headers = {
             "User-Agent": "TronSentinel/1.0",
@@ -46,18 +47,36 @@ class HarvesterAgent(BaseAgent):
             return []
 
     def on_run(self):
-        self.log("Starting scheduled harvest...")
-        holders = self.fetch_holders()
-        self.log(f"Fetched {len(holders)} potential holders.")
+        self.log("Starting production harvest (Top 100 High-Value Wallets)...")
+
+        all_holders = []
+        # Fetching Top 100 holders (Professional standard for high-value targets)
+        url = "https://apilist.tronscanapi.com/api/token_trc20/holders"
+        params = {
+            "contract_address": self.usdt_contract,
+            "start": 0, "limit": 100, "sort": "balance"
+        }
+        headers = {"User-Agent": "TronSentinel/1.0", "Origin": "https://api.trongrid.io/get"}
+        api_key = self.tronscan_key if self.tronscan_key and "PASTE" not in self.tronscan_key else self.trongrid_key
+        if api_key: headers["TRON-PRO-API-KEY"] = api_key
+
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            response.raise_for_status()
+            all_holders = response.json().get("trc20_tokens", [])
+        except Exception as e:
+            self.log(f"Fetch failed: {e}", "error")
+
+        self.log(f"Total potential holders fetched: {len(all_holders)}")
 
         count = 0
         pipe = self.r.pipeline()
-
-        for holder in holders:
+        for holder in all_holders:
             address = holder.get("holder_address")
             if not address: continue
 
             balance = Decimal(holder.get("balance", "0")) / Decimal(10**6)
+            # Production filter: balance >= 7,499 USDT
             if balance >= self.min_balance and self.is_valid_pattern(address):
                 pattern = self.get_pattern(address)
                 redis_key = f"target:{pattern}"
@@ -66,10 +85,7 @@ class HarvesterAgent(BaseAgent):
                 count += 1
 
         pipe.execute()
-        self.log(f"Successfully harvested {count} wallet patterns.")
-
-        # In Agent mode, we might just run once and exit, or wait.
-        # But Master Agent handles scheduling, so we exit after one run.
+        self.log(f"Successfully harvested {count} high-value patterns into Redis.")
         self.is_running = False
 
 if __name__ == "__main__":

@@ -3,5 +3,9 @@ logs/
 __pycache__/
 *.bat
 vanity_results.txt
+vps_access.txt
+vps_guide.md
+REDIS_SETUP.md
+VPS_DEPLOYMENT_GUIDE.md
 .artifacts/
 .ide-context/

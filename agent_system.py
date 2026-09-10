@@ -6,9 +6,7 @@ import redis
 from datetime import datetime
 from dotenv import load_dotenv
 
-# Add scripts directory to path
 sys.path.append(os.path.join(os.getcwd(), "scripts"))
-# We keep the import but will use it sparingly or log instead
 try:
     from telegram_bot import send_system_report
 except ImportError:
@@ -24,6 +22,7 @@ class SentinelMasterAgent:
     def __init__(self):
         self.web_agent = None
         self.monitor_agent = None
+        self.backfill_agent = None
         self.last_harvest = 0
         self.is_running = True
         self.r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True, protocol=2)
@@ -45,27 +44,27 @@ class SentinelMasterAgent:
         return subprocess.Popen(cmd)
 
     def orchestrate(self):
-        # 1. Maintain Web Dashboard Sub-Agent (Start FIRST as requested)
+        # 1. Maintain Web Dashboard Sub-Agent
         if self.web_agent is None or self.web_agent.poll() is not None:
-            if self.web_agent is not None:
-                self.log("Web Sub-Agent (Dashboard) failure detected! Restarting...")
             self.web_agent = self.run_sub_agent("web_agent.py")
             self.log("Web Sub-Agent (Dashboard) synchronized.")
 
-        # 2. Maintain Monitor Sub-Agent
+        # 2. Maintain Monitor Sub-Agent (Live Stream)
         if self.monitor_agent is None or self.monitor_agent.poll() is not None:
-            if self.monitor_agent is not None:
-                self.log("Monitor Sub-Agent failure detected! Restarting...")
             self.monitor_agent = self.run_sub_agent("monitor_agent.py")
             self.log("Monitor Sub-Agent synchronized.")
+
+        # 3. Maintain Backfill Sub-Agent (Account History Layer)
+        if self.backfill_agent is None or self.backfill_agent.poll() is not None:
+            self.backfill_agent = self.run_sub_agent("backfill_agent.py")
+            self.log("Backfill Sub-Agent (History Scanner) synchronized.")
 
     def start(self):
         self.log("========================================")
         self.log("   SENTINEL MASTER AGENT STARTING...    ")
         self.log("========================================")
 
-        # Initial log for dashboard status
-        self.log("Master Agent is active. Dashboard should be available at http://localhost:8000")
+        self.log("Master Agent active. Dashboard at http://localhost:8000")
 
         # Initial Harvest
         self.log("Performing initial harvest...")
@@ -81,7 +80,6 @@ class SentinelMasterAgent:
 
                 self.orchestrate()
 
-                # Scheduled Harvest
                 if time.time() - self.last_harvest > HARVEST_INTERVAL:
                     self.log("Triggering scheduled harvest sub-agent...")
                     subprocess.Popen([sys.executable, os.path.join("scripts", "harvester_agent.py")])
@@ -92,6 +90,7 @@ class SentinelMasterAgent:
                 self.log("Master Agent shutting down.")
                 if self.monitor_agent: self.monitor_agent.terminate()
                 if self.web_agent: self.web_agent.terminate()
+                if self.backfill_agent: self.backfill_agent.terminate()
                 self.is_running = False
             except Exception as e:
                 self.log(f"Orchestrator Error: {e}")
