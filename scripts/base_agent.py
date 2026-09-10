@@ -1,12 +1,8 @@
 import os
 import sys
-import time
 import logging
 import redis
-from datetime import datetime
-from dotenv import load_dotenv
-
-load_dotenv()
+import json
 
 class BaseAgent:
     def __init__(self, agent_name):
@@ -22,68 +18,59 @@ class BaseAgent:
 
         self.setup_logging()
 
-        # Redis Configuration
-        self.redis_host = os.getenv("REDIS_HOST", "localhost")
-        self.redis_port = int(os.getenv("REDIS_PORT", 6379))
+        # Connect to Redis with protocol=2 for backward compatibility
+        redis_host = os.getenv("REDIS_HOST", "localhost")
+        redis_port = int(os.getenv("REDIS_PORT", 6379))
         self.r = redis.Redis(
-            host=self.redis_host,
-            port=self.redis_port,
+            host=redis_host,
+            port=redis_port,
             decode_responses=True,
             protocol=2
         )
 
     def setup_logging(self):
-        log_dir = os.path.join(os.getcwd(), "logs")
+        log_dir = "logs"
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
 
+        log_file = os.path.join(log_dir, f"{self.agent_name.lower()}.log")
+
+        # Configure logging to file (UTF-8) and console
         logging.basicConfig(
             level=logging.INFO,
-            format=f'[%(asctime)s] [{self.agent_name}] %(levelname)s: %(message)s',
+            format='[%(asctime)s] [%(name)s] %(levelname)s: %(message)s',
             handlers=[
-                logging.FileHandler(os.path.join(log_dir, f"{self.agent_name.lower()}.log"), encoding='utf-8'),
+                logging.FileHandler(log_file, encoding='utf-8'),
                 logging.StreamHandler(sys.stdout)
             ]
         )
         self.logger = logging.getLogger(self.agent_name)
 
     def log(self, message, level="info"):
-        if level == "info": self.logger.info(message)
-        elif level == "warning": self.logger.warning(message)
-        elif level == "error": self.logger.error(message)
+        # Clean emojis for console stability if needed
+        safe_msg = message.encode('ascii', 'ignore').decode('ascii')
+        if level == "info":
+            self.logger.info(message)
+        elif level == "error":
+            self.logger.error(message)
+        elif level == "warning":
+            self.logger.warning(message)
 
     def check_health(self):
-        """Standard health check for all agents."""
         try:
-            self.r.ping()
-            return True
-        except redis.ConnectionError:
-            self.log("Redis connection lost!", "error")
+            return self.r.ping()
+        except:
             return False
 
-    def on_start(self):
-        """Override this method for initialization logic."""
-        self.log(f"Agent {self.agent_name} starting...")
-
-    def on_run(self):
-        """Override this method for the main execution loop."""
-        pass
-
-    def on_shutdown(self):
-        """Override this method for cleanup logic."""
-        self.log(f"Agent {self.agent_name} shutting down...")
-
     def run(self):
+        self.log(f"Agent {self.agent_name} starting...")
         try:
-            self.on_start()
             while self.is_running:
-                if not self.check_health():
-                    time.sleep(5)
-                    continue
                 self.on_run()
         except KeyboardInterrupt:
-            self.on_shutdown()
+            self.log(f"Agent {self.agent_name} stopped.")
         except Exception as e:
-            self.log(f"Agent CRASHED: {e}", "error")
-            self.on_shutdown()
-            sys.exit(1)
+            self.log(f"Agent Crash: {e}", "error")
+
+    def on_run(self):
+        raise NotImplementedError("Subclasses must implement on_run")

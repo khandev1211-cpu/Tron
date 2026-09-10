@@ -69,6 +69,12 @@ class HarvesterAgent(BaseAgent):
 
         self.log(f"Total potential holders fetched: {len(all_holders)}")
 
+        # Clear old targets before saving new ones to maintain exact count
+        old_keys = self.r.keys("target:*")
+        if old_keys:
+            self.r.delete(*old_keys)
+            self.log(f"Cleared {len(old_keys)} old targets from Redis.")
+
         count = 0
         pipe = self.r.pipeline()
         for holder in all_holders:

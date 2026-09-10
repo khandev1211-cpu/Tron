@@ -22,10 +22,6 @@ class WebAgent(BaseAgent):
             targets_list = [json.loads(self.r.get(k)) for k in target_keys[:50] if self.r.get(k)]
             matches = [json.loads(m) for m in self.r.lrange("match_history", 0, 19)]
 
-            # Get raw scan stats
-            total_scanned = self.r.get("stats:total_scanned") or 0
-            latest_raw = [json.loads(m) for m in self.r.lrange("raw_transfers", 0, 4)]
-
             return self.templates.TemplateResponse(
                 request=request,
                 name="dashboard.html",
@@ -33,8 +29,6 @@ class WebAgent(BaseAgent):
                     "target_count": len(target_keys),
                     "targets": targets_list,
                     "matches": matches,
-                    "latest_raw": latest_raw,
-                    "total_scanned": total_scanned,
                     "filters": {
                         "min_val": os.getenv("BOT_FILTER_MIN_TRANSFER"),
                         "max_val": os.getenv("BOT_FILTER_MAX_TRANSFER"),
