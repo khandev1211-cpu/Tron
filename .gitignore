@@ -9,3 +9,6 @@ REDIS_SETUP.md
 VPS_DEPLOYMENT_GUIDE.md
 .artifacts/
 .ide-context/
+.exe
+
+.idea

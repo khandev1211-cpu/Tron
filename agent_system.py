@@ -7,10 +7,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 sys.path.append(os.path.join(os.getcwd(), "scripts"))
-try:
-    from telegram_bot import send_system_report
-except ImportError:
-    send_system_report = lambda x: print(f"[System Report] {x}")
+def send_system_report(x):
+    print(f"[System Report] {x}")
 
 load_dotenv()
 
@@ -58,6 +56,11 @@ class SentinelMasterAgent:
         if self.backfill_agent is None or self.backfill_agent.poll() is not None:
             self.backfill_agent = self.run_sub_agent("backfill_agent.py")
             self.log("Backfill Sub-Agent (History Scanner) synchronized.")
+
+        # 4. Maintain GPU Worker Engine (Module D FIFO)
+        if not hasattr(self, 'gpu_worker') or self.gpu_worker is None or self.gpu_worker.poll() is not None:
+            self.gpu_worker = self.run_sub_agent("gpu_worker.py")
+            self.log("GPU Worker Engine (Module D) synchronized.")
 
     def start(self):
         self.log("========================================")

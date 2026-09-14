@@ -1,12 +1,10 @@
 import os
 import uvicorn
 import json
-import subprocess
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from base_agent import BaseAgent
 from datetime import datetime
-from gpu_engine import start_mining
 
 class WebAgent(BaseAgent):
     def __init__(self):
@@ -22,6 +20,14 @@ class WebAgent(BaseAgent):
             targets_list = [json.loads(self.r.get(k)) for k in target_keys[:50] if self.r.get(k)]
             matches = [json.loads(m) for m in self.r.lrange("match_history", 0, 19)]
 
+            # Check status for each match in the queue
+            for m in matches:
+                p = m['pattern']
+                m['status'] = self.r.get(f"mine_status:{p}") or "idle"
+                if m['status'] == 'completed':
+                    res_raw = self.r.get(f"mine_result:{p}")
+                    if res_raw: m['result'] = json.loads(res_raw)
+
             return self.templates.TemplateResponse(
                 request=request,
                 name="dashboard.html",
@@ -35,15 +41,17 @@ class WebAgent(BaseAgent):
                         "min_bal": os.getenv("BOT_FILTER_MIN_BALANCE"),
                         "max_bal": os.getenv("BOT_FILTER_MAX_BALANCE")
                     },
-                    "system_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    "system_time": datetime.now().strftime("%H:%M:%S")
                 }
             )
 
         @self.app.post("/api/mine/{pattern}")
         async def trigger_mining(pattern: str):
-            self.log(f"Manual Mining Triggered for pattern: {pattern}")
-            success, msg = start_mining(pattern)
-            return {"success": success, "message": msg}
+            # Push to FIFO Queue for GPU Worker
+            task = {"pattern": pattern, "source": "web", "timestamp": time.time()}
+            self.r.lpush("gpu_queue", json.dumps(task))
+            self.r.set(f"mine_status:{pattern}", "queued")
+            return {"success": True, "message": "Task added to RTX 4090 Queue"}
 
         @self.app.post("/simulate")
         async def simulate():
@@ -63,9 +71,10 @@ class WebAgent(BaseAgent):
             return {"status": "success"}
 
     def on_run(self):
-        self.log("Starting Web Dashboard on http://0.0.0.0:8000")
+        self.log("Starting Dashboard on http://0.0.0.0:8000")
         uvicorn.run(self.app, host="0.0.0.0", port=8000, log_level="warning")
 
 if __name__ == "__main__":
+    import time
     agent = WebAgent()
     agent.run()
