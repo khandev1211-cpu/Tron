@@ -5,6 +5,7 @@ import redis
 import subprocess
 import platform
 import sys
+import re
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -16,29 +17,22 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 GPU_PATH = os.getenv("GPU_MINER_PATH")
 
 def get_redis_client():
-    return redis.Redis(
-        host=REDIS_HOST,
-        port=REDIS_PORT,
-        decode_responses=True,
-        protocol=2,
-        socket_timeout=None,
-        retry_on_timeout=True
-    )
+    return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True, protocol=2)
 
 r = get_redis_client()
 
-def get_gpu_info():
+def get_gpu_count():
     try:
-        output = subprocess.check_output(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True)
-        return output.strip()
+        output = subprocess.check_output(["nvidia-smi", "-L"], text=True)
+        return len(re.findall(r"GPU \d+:", output))
     except:
-        return "Generic CPU/No GPU"
+        return 1
 
 def run_gpu_miner(pattern):
-    # Dynamic settings from .env
+    current_os = platform.system()
     prefix_len = int(os.getenv("GPU_PREFIX_MATCH_LEN", 2))
     suffix_len = int(os.getenv("GPU_SUFFIX_MATCH_LEN", 2))
-    timeout_sec = int(os.getenv("GPU_MINING_TIMEOUT", 120))
+    timeout = int(os.getenv("GPU_MINING_TIMEOUT", 120))
 
     parts = pattern.split('*')
     p_raw = parts[0][1:] if parts[0].startswith('T') else parts[0]
@@ -50,81 +44,79 @@ def run_gpu_miner(pattern):
     result_id = int(time.time())
     result_file = os.path.join(os.getcwd(), f"match_{result_id}.txt")
 
-    # ProVanity Command
-    batch_content = f"""@echo off
-"{GPU_PATH}" generate-tron --pattern prefix:{prefix} --pattern suffix:{suffix} --devices 0 > "{result_file}"
-exit
-"""
-    batch_path = os.path.join(os.getcwd(), f"run_gpu_{result_id}.bat")
-    with open(batch_path, "w") as f:
-        f.write(batch_content)
+    # Using 'all' devices for Multi-GPU support (Vast.ai)
+    cmd = [GPU_PATH, "generate-tron", "--pattern", f"prefix:{prefix}", "--pattern", f"suffix:{suffix}", "--devices", "all"]
 
     try:
-        proc = subprocess.Popen(["cmd", "/c", batch_path], creationflags=subprocess.CREATE_NO_WINDOW)
-        print(f"[*] Mining {prefix_len}+{suffix_len} Match (T{prefix}...{suffix}) for {timeout_sec}s...")
+        if current_os == "Windows":
+            # Windows workaround for TUI: Batch + File
+            batch_content = f'@echo off\n"{GPU_PATH}" generate-tron --pattern prefix:{prefix} --pattern suffix:{suffix} --devices all > "{result_file}"\nexit'
+            batch_path = os.path.join(os.getcwd(), f"run_gpu_{result_id}.bat")
+            with open(batch_path, "w") as f: f.write(batch_content)
 
-        # Check every 0.5s
-        for _ in range(timeout_sec * 2):
-            if os.path.exists(result_file) and os.path.getsize(result_file) > 10:
-                try:
+            proc = subprocess.Popen(["cmd", "/c", batch_path], creationflags=subprocess.CREATE_NO_WINDOW)
+            print(f"[*] Local GPU Attack: T{prefix}...{suffix} (Watching file...)")
+
+            for _ in range(timeout * 2):
+                if os.path.exists(result_file) and os.path.getsize(result_file) > 10:
                     with open(result_file, "r") as f:
                         content = f.read()
-                        if "address:" in content.lower() and "private key:" in content.lower():
+                        if "address:" in content.lower():
                             addr, priv = None, None
                             for line in content.split('\n'):
                                 if "address:" in line.lower(): addr = line.split(":")[1].strip()
                                 if "private key:" in line.lower(): priv = line.split(":")[1].strip()
-
                             if addr and priv:
-                                print(f"[+] Match found in file!")
+                                try: os.remove(batch_path); os.remove(result_file)
+                                except: pass
                                 return addr, priv
-                except:
-                    pass # File might be busy
-            time.sleep(0.5)
-
-        print("[!] Timeout reached. Killing GPU process...")
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(0.5)
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            # Vast.ai (Linux) direct pipe
+            print(f"[*] Vast.ai Turbo Attack: T{prefix}...{suffix} (Streaming pipe...)")
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            start_t = time.time()
+            while time.time() - start_t < timeout:
+                line = process.stdout.readline()
+                if not line: break
+                if "address:" in line.lower():
+                    addr = line.split("address:")[1].strip()
+                    priv = process.stdout.readline().split("private key:")[1].strip() # Usually next line
+                    process.terminate()
+                    return addr, priv
         return None, None
     except Exception as e:
         print(f"Engine Error: {e}")
         return None, None
 
 def process_queue():
-    gpu_name = get_gpu_info()
-    print(f"--- SENTINEL GPU FIFO ENGINE ---")
-    print(f"[*] HARDWARE: {gpu_name}")
+    gpu_count = get_gpu_count()
+    print(f"--- SENTINEL TURBO ENGINE ACTIVE ---")
+    print(f"[*] Detected GPUs: {gpu_count}")
 
     while True:
         try:
-            # Refresh settings each loop
-            load_dotenv(override=True)
-            p_len = os.getenv("GPU_PREFIX_MATCH_LEN")
-            s_len = os.getenv("GPU_SUFFIX_MATCH_LEN")
-
             task_data = r.brpop("gpu_queue", timeout=30)
             if task_data is None: continue
 
             task = json.loads(task_data[1])
             pattern = task['pattern']
-            print(f"\n[+] TASK: {pattern} | CONFIG: {p_len}+{s_len}")
-
             r.set(f"mine_status:{pattern}", "mining")
-            r.set(f"mine_mode:{pattern}", f"{gpu_name} ({p_len}+{s_len})")
+            r.set(f"mine_mode:{pattern}", f"{gpu_count}x GPU Turbo")
 
+            print(f"\n[+] TASK: {pattern} on {gpu_count} GPU(s)")
             addr, priv = run_gpu_miner(pattern)
 
             if addr and priv:
                 result = {"address": addr, "private_key": priv, "time": datetime.now().strftime("%H:%M:%S")}
                 r.set(f"mine_result:{pattern}", json.dumps(result))
                 r.set(f"mine_status:{pattern}", "completed")
-                print(f"[✅] SUCCESS: Results saved to Dashboard.")
+                print(f"[✅] SUCCESS!")
             else:
                 r.set(f"mine_status:{pattern}", "error")
-                print(f"[❌] FAILED: Pattern not found on this hardware.")
-
-        except Exception as e:
-            print(f"Loop Error: {e}")
+                print(f"[❌] TIMEOUT.")
+        except:
             time.sleep(2)
 
 if __name__ == "__main__":
