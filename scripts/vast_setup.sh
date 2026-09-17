@@ -31,6 +31,6 @@ else
 fi
 
 echo "=================================================="
-echo " SETUP MUKAMMAL: Please configure your .env file "
-echo " pointing to your local Ngrok tunnel address.     "
+echo " SETUP MUKAMMAL: Please configure your .env file  "
+echo " with REDIS_HOST=localhost and start redis server."
 echo "=================================================="
