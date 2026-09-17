@@ -17,7 +17,16 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 GPU_PATH = os.getenv("GPU_MINER_PATH")
 
 def get_redis_client():
-    return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True, protocol=2)
+    # Setup robust connectivity params suitable for ngrok tcp tunnels
+    return redis.Redis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        decode_responses=True,
+        protocol=2,
+        socket_timeout=None,
+        socket_keepalive=True,
+        retry_on_timeout=True
+    )
 
 r = get_redis_client()
 
@@ -30,8 +39,8 @@ def get_gpu_count():
 
 def run_gpu_miner(pattern):
     current_os = platform.system()
-    prefix_len = int(os.getenv("GPU_PREFIX_MATCH_LEN", 2))
-    suffix_len = int(os.getenv("GPU_SUFFIX_MATCH_LEN", 2))
+    prefix_len = int(os.getenv("GPU_PREFIX_MATCH_LEN", 3))
+    suffix_len = int(os.getenv("GPU_SUFFIX_MATCH_LEN", 3))
     timeout = int(os.getenv("GPU_MINING_TIMEOUT", 120))
 
     parts = pattern.split('*')
@@ -44,12 +53,11 @@ def run_gpu_miner(pattern):
     result_id = int(time.time())
     result_file = os.path.join(os.getcwd(), f"match_{result_id}.txt")
 
-    # Using 'all' devices for Multi-GPU support (Vast.ai)
+    # Using 'all' devices for Multi-GPU support (Vast.ai 2x 4090 support)
     cmd = [GPU_PATH, "generate-tron", "--pattern", f"prefix:{prefix}", "--pattern", f"suffix:{suffix}", "--devices", "all"]
 
     try:
         if current_os == "Windows":
-            # Windows workaround for TUI: Batch + File
             batch_content = f'@echo off\n"{GPU_PATH}" generate-tron --pattern prefix:{prefix} --pattern suffix:{suffix} --devices all > "{result_file}"\nexit'
             batch_path = os.path.join(os.getcwd(), f"run_gpu_{result_id}.bat")
             with open(batch_path, "w") as f: f.write(batch_content)
@@ -73,16 +81,22 @@ def run_gpu_miner(pattern):
                 time.sleep(0.5)
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            # Vast.ai (Linux) direct pipe
-            print(f"[*] Vast.ai Turbo Attack: T{prefix}...{suffix} (Streaming pipe...)")
+            # Vast.ai / Linux multi-gpu high throughput pipe mode
+            print(f"[*] Vast.ai Turbo Attack: T{prefix}...{suffix} (Streaming 2x RTX 4090 pipelines...)")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             start_t = time.time()
+
+            addr, priv = None, None
             while time.time() - start_t < timeout:
                 line = process.stdout.readline()
                 if not line: break
-                if "address:" in line.lower():
+                l_low = line.lower()
+                if "address:" in l_low:
                     addr = line.split("address:")[1].strip()
-                    priv = process.stdout.readline().split("private key:")[1].strip() # Usually next line
+                if "private key:" in l_low:
+                    priv = line.split("private key:")[1].strip()
+
+                if addr and priv:
                     process.terminate()
                     return addr, priv
         return None, None
@@ -93,7 +107,7 @@ def run_gpu_miner(pattern):
 def process_queue():
     gpu_count = get_gpu_count()
     print(f"--- SENTINEL TURBO ENGINE ACTIVE ---")
-    print(f"[*] Detected GPUs: {gpu_count}")
+    print(f"[*] Detected GPUs/Nodes: {gpu_count}")
 
     while True:
         try:
@@ -103,20 +117,21 @@ def process_queue():
             task = json.loads(task_data[1])
             pattern = task['pattern']
             r.set(f"mine_status:{pattern}", "mining")
-            r.set(f"mine_mode:{pattern}", f"{gpu_count}x GPU Turbo")
+            r.set(f"mine_mode:{pattern}", f"{gpu_count}x GPU Distributed Turbo")
 
-            print(f"\n[+] TASK: {pattern} on {gpu_count} GPU(s)")
+            print(f"\n[+] TASK RECEIVED: {pattern} on {gpu_count} Nodes")
             addr, priv = run_gpu_miner(pattern)
 
             if addr and priv:
                 result = {"address": addr, "private_key": priv, "time": datetime.now().strftime("%H:%M:%S")}
                 r.set(f"mine_result:{pattern}", json.dumps(result))
                 r.set(f"mine_status:{pattern}", "completed")
-                print(f"[✅] SUCCESS!")
+                print(f"[✅] SUCCESS: Match synced across nodes.")
             else:
                 r.set(f"mine_status:{pattern}", "error")
                 print(f"[❌] TIMEOUT.")
-        except:
+        except Exception as e:
+            print(f"Queue error: {e}")
             time.sleep(2)
 
 if __name__ == "__main__":

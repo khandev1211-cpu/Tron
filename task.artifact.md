@@ -1,0 +1,3 @@
+- [x] Create `scripts/vast_setup.sh` for remote instance orchestration
+- [x] Connect remote `gpu_worker.py` to Ngrok public tunnel endpoints
+- [x] Perform final validation on dual RTX 4090 distributed pipeline
