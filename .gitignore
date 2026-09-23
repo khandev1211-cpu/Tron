@@ -1,6 +1,7 @@
 .env
 logs/
 __pycache__/
+*.pyc
 *.bat
 vanity_results.txt
 vps_access.txt
@@ -9,6 +10,12 @@ REDIS_SETUP.md
 VPS_DEPLOYMENT_GUIDE.md
 .artifacts/
 .ide-context/
-.exe
-
-.idea
+.idea/
+scret.txt
+cache-opencl*
+match_*.txt
+result*.txt
+tools/repo_temp/
+*.zip
+__MACOSX
+.DS_Store

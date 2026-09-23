@@ -43,7 +43,13 @@ def run_gpu_miner(pattern):
     suffix_len = int(os.getenv("GPU_SUFFIX_MATCH_LEN", 3))
     timeout = int(os.getenv("GPU_MINING_TIMEOUT", 120))
 
-    parts = pattern.split('*')
+    if '*' in pattern:
+        parts = pattern.split('*')
+    elif '...' in pattern:
+        parts = pattern.split('...')
+    else:
+        parts = [pattern[:5], pattern[-5:]]
+
     p_raw = parts[0][1:] if parts[0].startswith('T') else parts[0]
     s_raw = parts[1]
 
@@ -51,29 +57,41 @@ def run_gpu_miner(pattern):
     suffix = s_raw[-suffix_len:]
 
     result_id = int(time.time())
-    result_file = os.path.join(os.getcwd(), f"match_{result_id}.txt")
+    result_file = f"match_{result_id}.txt"
 
-    # Using 'all' devices for Multi-GPU support (Vast.ai 2x 4090 support)
-    cmd = [GPU_PATH, "generate-tron", "--pattern", f"prefix:{prefix}", "--pattern", f"suffix:{suffix}", "--devices", "all"]
+    # Base58 valid padding template (34 total chars)
+    base58_pad = "123456789ABCDEFGHJKLMNPQRSTUV"
+    pad_needed = 34 - 1 - len(prefix) - len(suffix)
+    dummy_fill = base58_pad[:pad_needed]
+    target_address = f'T{prefix}{dummy_fill}{suffix}'
+
+    cmd = [
+        GPU_PATH,
+        "--matching", target_address,
+        "--prefix-count", str(len(prefix)),
+        "--suffix-count", str(len(suffix)),
+        "--quit-count", "1",
+        "--skip", "1" if current_os == "Windows" else "0",
+        "--output", result_file
+    ]
 
     try:
         if current_os == "Windows":
-            batch_content = f'@echo off\n"{GPU_PATH}" generate-tron --pattern prefix:{prefix} --pattern suffix:{suffix} --devices all > "{result_file}"\nexit'
+            batch_content = f'@echo off\n"{GPU_PATH}" --matching {target_address} --prefix-count {len(prefix)} --suffix-count {len(suffix)} --quit-count 1 --skip 1 --output "{result_file}"\nexit'
             batch_path = os.path.join(os.getcwd(), f"run_gpu_{result_id}.bat")
             with open(batch_path, "w") as f: f.write(batch_content)
 
             proc = subprocess.Popen(["cmd", "/c", batch_path], creationflags=subprocess.CREATE_NO_WINDOW)
-            print(f"[*] Local GPU Attack: T{prefix}...{suffix} (Watching file...)")
+            print(f"[*] Local GPU Attack: T{prefix}...{suffix} (Watching result file...)")
 
             for _ in range(timeout * 2):
                 if os.path.exists(result_file) and os.path.getsize(result_file) > 10:
                     with open(result_file, "r") as f:
-                        content = f.read()
-                        if "address:" in content.lower():
-                            addr, priv = None, None
-                            for line in content.split('\n'):
-                                if "address:" in line.lower(): addr = line.split(":")[1].strip()
-                                if "private key:" in line.lower(): priv = line.split(":")[1].strip()
+                        content = f.read().strip()
+                        if "," in content:
+                            priv, addr = content.split(",", 1)
+                            priv = priv.strip()
+                            addr = addr.strip()
                             if addr and priv:
                                 try: os.remove(batch_path); os.remove(result_file)
                                 except: pass
@@ -81,24 +99,23 @@ def run_gpu_miner(pattern):
                 time.sleep(0.5)
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            # Vast.ai / Linux multi-gpu high throughput pipe mode
-            print(f"[*] Vast.ai Turbo Attack: T{prefix}...{suffix} (Streaming 2x RTX 4090 pipelines...)")
+            print(f"[*] Multi-GPU Engine Attack: T{prefix}...{suffix}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             start_t = time.time()
 
             addr, priv = None, None
             while time.time() - start_t < timeout:
-                line = process.stdout.readline()
-                if not line: break
-                l_low = line.lower()
-                if "address:" in l_low:
-                    addr = line.split("address:")[1].strip()
-                if "private key:" in l_low:
-                    priv = line.split("private key:")[1].strip()
-
-                if addr and priv:
-                    process.terminate()
-                    return addr, priv
+                if os.path.exists(result_file) and os.path.getsize(result_file) > 10:
+                    with open(result_file, "r") as f:
+                        content = f.read().strip()
+                        if "," in content:
+                            priv, addr = content.split(",", 1)
+                            priv, addr = priv.strip(), addr.strip()
+                            process.terminate()
+                            try: os.remove(result_file)
+                            except: pass
+                            return addr, priv
+                time.sleep(0.5)
         return None, None
     except Exception as e:
         print(f"Engine Error: {e}")

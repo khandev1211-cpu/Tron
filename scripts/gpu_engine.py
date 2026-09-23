@@ -22,7 +22,8 @@ def is_gpu_available():
 
 def start_mining(pattern):
     """
-    Triggers the Poisoning Engine using NVIDIA GPU (ProVanity).
+    Triggers the Poisoning Engine using NVIDIA GPU (TRON Profanity Engine).
+    Generates combined prefix and suffix simultaneously.
     Falls back to Python CPU if GPU is not available.
     """
     r.set(f"mine_status:{pattern}", "mining")
@@ -35,23 +36,35 @@ def start_mining(pattern):
 
     try:
         if use_gpu:
-            # ProVanity pattern logic:
-            # If pattern is TLaGj*GYitv, we use prefix:LaGj (T is implicit)
-            parts = pattern.split('*')
-            prefix = parts[0]
-            if prefix.startswith('T'):
-                prefix = prefix[1:] # Strip leading T for ProVanity
+            # Parse pattern (e.g. TLaGj*GYitv or TLaGj...GYitv)
+            if '*' in pattern:
+                parts = pattern.split('*')
+            elif '...' in pattern:
+                parts = pattern.split('...')
+            else:
+                parts = [pattern[:5], pattern[-5:]]
 
-            # Note: ProVanity v1.1.1 doesn't support combined prefix+suffix in a single flag easily
-            # We target the prefix as the primary match
-            cmd_pattern = f"prefix:{prefix}"
+            prefix = parts[0][1:] if parts[0].startswith('T') else parts[0]
+            suffix = parts[1]
+
+            prefix_count = len(prefix)
+            suffix_count = len(suffix)
+
+            # Base58 valid padding template (34 total chars)
+            base58_pad = "123456789ABCDEFGHJKLMNPQRSTUV"
+            pad_needed = 34 - 1 - len(prefix) - len(suffix)
+            dummy_fill = base58_pad[:pad_needed]
+            target_address = f'T{prefix}{dummy_fill}{suffix}'
+
+            result_file = os.path.join(os.getcwd(), f"result_{pattern.replace('*', '_')}.txt")
 
             if current_os == "Windows":
-                # Launch ProVanity in a visible background window so the user can see the progress
+                # Launch TRON Profanity Engine in a visible background batch window
                 batch_content = f"""@echo off
 title SENTINEL GPU ENGINE - {pattern}
-echo [+] Starting NVIDIA GPU Attack for {pattern}
-"{gpu_miner_path}" generate-tron --pattern {cmd_pattern} --devices 0
+echo [+] Starting Simultaneous Prefix+Suffix NVIDIA GPU Attack for {pattern}
+echo [+] Prefix: T{prefix} ({prefix_count} chars) | Suffix: {suffix} ({suffix_count} chars)
+"{gpu_miner_path}" --matching {target_address} --prefix-count {prefix_count} --suffix-count {suffix_count} --quit-count 1 --skip 1 --output "{result_file}"
 pause
 """
                 batch_path = os.path.join(os.getcwd(), "run_gpu_attack.bat")
@@ -60,10 +73,10 @@ pause
 
                 subprocess.Popen(["cmd", "/c", "start", batch_path], shell=True)
             else:
-                # Linux/VPS (nohup)
-                cmd = f'nohup "{gpu_miner_path}" generate-tron --pattern {cmd_pattern} > vanity_{pattern}.log 2>&1 &'
+                # Linux / VPS background mode
+                cmd = f'nohup "{gpu_miner_path}" --matching {target_address} --prefix-count {prefix_count} --suffix-count {suffix_count} --quit-count 1 --output "{result_file}" > vanity_{pattern}.log 2>&1 &'
                 os.system(cmd)
-            mode = "GPU (NVIDIA)"
+            mode = "GPU (NVIDIA Profanity - Combined Prefix+Suffix)"
         else:
             # CPU Fallback
             if current_os == "Windows":

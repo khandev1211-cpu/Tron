@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from base_agent import BaseAgent
 from datetime import datetime
+import time
 
 class WebAgent(BaseAgent):
     def __init__(self):

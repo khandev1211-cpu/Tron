@@ -19,8 +19,8 @@ Intercepts live USDT transfers via low-latency gRPC streams, filtering for trans
 ### Module C: Interactive Alert Interface (Planned)
 Dispatches Markdown-formatted alerts to a secure Telegram Bot with inline "Vanity It!" action buttons.
 
-### Module D: GPU Task Queue & Engine (Planned)
-Manages a FIFO queue for address generation tasks, triggering CUDA-based `tron-profanity` to find matching address layouts in 2-15 seconds.
+### Module D: GPU Task Queue & Action Engine
+Manages a FIFO queue in Redis for address generation tasks, triggering `profanity.exe` (OpenCL TRON Profanity Engine) to generate matching address layouts with **simultaneous Prefix + Suffix matching** in 8-15 seconds. See [GPU Engine Docs](docs/GPU_ENGINE.md).
 
 ## 📦 Setup Instructions
 
