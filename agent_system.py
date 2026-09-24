@@ -14,6 +14,7 @@ load_dotenv()
 
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+GPU_MINER_PATH = os.getenv("GPU_MINER_PATH")
 HARVEST_INTERVAL = 6 * 3600  # 6 hours
 
 class SentinelMasterAgent:
@@ -57,10 +58,11 @@ class SentinelMasterAgent:
             self.backfill_agent = self.run_sub_agent("backfill_agent.py")
             self.log("Backfill Sub-Agent (History Scanner) synchronized.")
 
-        # 4. Maintain GPU Worker Engine (Module D FIFO)
-        if not hasattr(self, 'gpu_worker') or self.gpu_worker is None or self.gpu_worker.poll() is not None:
-            self.gpu_worker = self.run_sub_agent("gpu_worker.py")
-            self.log("GPU Worker Engine (Module D) synchronized.")
+        # 4. Maintain GPU Worker Engine (Only run locally if local GPU binary path is defined & exists)
+        if GPU_MINER_PATH and os.path.exists(GPU_MINER_PATH):
+            if not hasattr(self, 'gpu_worker') or self.gpu_worker is None or self.gpu_worker.poll() is not None:
+                self.gpu_worker = self.run_sub_agent("gpu_worker.py")
+                self.log("Local GPU Worker Engine synchronized.")
 
     def start(self):
         self.log("========================================")
