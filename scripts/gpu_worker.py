@@ -17,15 +17,13 @@ REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 GPU_PATH = os.getenv("GPU_MINER_PATH")
 
 def get_redis_client():
-    # Setup robust connectivity params suitable for ngrok tcp tunnels
     return redis.Redis(
         host=REDIS_HOST,
         port=REDIS_PORT,
         decode_responses=True,
         protocol=2,
         socket_timeout=None,
-        socket_keepalive=True,
-        retry_on_timeout=True
+        socket_keepalive=True
     )
 
 r = get_redis_client()
@@ -56,10 +54,24 @@ def run_gpu_miner(pattern):
     prefix = p_raw[:prefix_len]
     suffix = s_raw[-suffix_len:]
 
+    # Check if local GPU miner executable exists
+    if not GPU_PATH or not os.path.exists(GPU_PATH):
+        # Local GPU executable not installed on Brain VPS -- delegated to external Remote GPU Node (TronVanity)
+        print(f"[*] Task '{pattern}' delegated to external Remote GPU Node (TronVanity)...")
+        start_t = time.time()
+        while time.time() - start_t < timeout:
+            res_raw = r.get(f"mine_result:{pattern}")
+            if res_raw:
+                try:
+                    res = json.loads(res_raw)
+                    return res.get("address"), res.get("private_key")
+                except: pass
+            time.sleep(1)
+        return None, None
+
     result_id = int(time.time())
     result_file = f"match_{result_id}.txt"
 
-    # Base58 valid padding template (34 total chars)
     base58_pad = "123456789ABCDEFGHJKLMNPQRSTUV"
     pad_needed = 34 - 1 - len(prefix) - len(suffix)
     dummy_fill = base58_pad[:pad_needed]
@@ -103,7 +115,6 @@ def run_gpu_miner(pattern):
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             start_t = time.time()
 
-            addr, priv = None, None
             while time.time() - start_t < timeout:
                 if os.path.exists(result_file) and os.path.getsize(result_file) > 10:
                     with open(result_file, "r") as f:
@@ -133,6 +144,13 @@ def process_queue():
 
             task = json.loads(task_data[1])
             pattern = task['pattern']
+
+            # Check if remote GPU worker (TronVanity) is processing or has processed it
+            mine_status = r.get(f"mine_status:{pattern}")
+            if mine_status == "mining" or mine_status == "completed":
+                # Already being handled by external GPU worker (TronVanity)
+                continue
+
             r.set(f"mine_status:{pattern}", "mining")
             r.set(f"mine_mode:{pattern}", f"{gpu_count}x GPU Distributed Turbo")
 
@@ -145,8 +163,13 @@ def process_queue():
                 r.set(f"mine_status:{pattern}", "completed")
                 print(f"[✅] SUCCESS: Match synced across nodes.")
             else:
-                r.set(f"mine_status:{pattern}", "error")
-                print(f"[❌] TIMEOUT.")
+                # If local VPS GPU miner wasn't available, check if Remote GPU Node completed it while waiting
+                res_raw = r.get(f"mine_result:{pattern}")
+                if res_raw:
+                    print(f"[✅] SUCCESS: Remote GPU Node completed match.")
+                else:
+                    r.set(f"mine_status:{pattern}", "error")
+                    print(f"[❌] TIMEOUT.")
         except Exception as e:
             print(f"Queue error: {e}")
             time.sleep(2)
